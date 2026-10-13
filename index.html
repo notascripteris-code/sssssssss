@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1B1030">
+<title>Kaboom</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <div class="logo" id="logo">KA<span>BOOM</span></div>
+    <button id="btnSearch" class="icon-btn" aria-label="Hledat lidi">🔍</button>
+  </header>
+  <div id="searchbar" hidden><input id="q" type="search" placeholder="Najdi lidi podle jména a stiskni Enter"></div>
+  <main>
+    <section id="view-home" class="view active">
+      <div class="seg" id="scope"><button data-s="all" class="on">Všichni</button><button data-s="friends">Přátelé</button></div>
+      <div id="grid"></div>
+    </section>
+    <section id="view-shorts" class="view"></section>
+    <section id="view-upload" class="view"><div class="panel">
+      <h2>Nahrát video</h2>
+      <div class="seg" id="kindSeg"><button data-k="short" class="on">Short</button><button data-k="long">Long</button></div>
+      <p class="muted" id="kindHint">Short je krátké video na celou obrazovku, nejvýš 90 sekund.</p>
+      <label class="drop"><input id="file" type="file" accept="video/*" hidden><span id="dropText">Vybrat video z telefonu</span></label>
+      <video id="preview" playsinline muted controls hidden></video>
+      <input id="title" class="field" maxlength="80" placeholder="Název videa">
+      <button id="publish" class="btn">Publikovat</button>
+    </div></section>
+    <section id="view-live" class="view"></section>
+    <section id="view-profile" class="view"></section>
+    <button id="snd" class="snd" hidden aria-label="Zvuk">🔊</button>
+  </main>
+  <nav id="tabs">
+    <button data-tab="home" class="on"><i>🏠</i>Domů</button>
+    <button data-tab="shorts"><i>💥</i>Shorts</button>
+    <button data-tab="upload" class="plus"><i>＋</i></button>
+    <button data-tab="live"><i>🔴</i>Live</button>
+    <button data-tab="profile"><i id="navMe">🙂</i>Profil</button>
+  </nav>
+  <div id="page" hidden>
+    <div class="page-head"><button class="icon-btn" id="pageBack" aria-label="Zpět">←</button><b id="pageTitle"></b></div>
+    <div id="pageBody"></div>
+  </div>
+  <div id="sheet" hidden>
+    <div class="sheet-bg" id="sheetBg"></div>
+    <div class="sheet-box">
+      <div class="sheet-head"><b id="sheetTitle">Komentáře</b><button class="icon-btn" id="sheetClose">✕</button></div>
+      <div id="comments"></div>
+      <div class="sheet-input"><input id="cInput" maxlength="200" placeholder="Přidat komentář"><button id="cSend" class="btn small">Odeslat</button></div>
+    </div>
+  </div>
+  <div id="auth" hidden><div class="panel">
+    <div class="logo big">KA<span>BOOM</span></div>
+    <div class="seg" id="authSeg"><button data-m="in" class="on">Přihlásit</button><button data-m="up">Registrace</button></div>
+    <input id="aUser" class="field" placeholder="Uživatelské jméno (3 až 20 znaků)" autocapitalize="none" hidden>
+    <input id="aMail" class="field" type="email" placeholder="E-mail" autocapitalize="none">
+    <input id="aPass" class="field" type="password" placeholder="Heslo (aspoň 6 znaků)">
+    <button id="aGo" class="btn">Přihlásit se</button>
+    <p id="aErr" class="muted"></p>
+  </div></div>
+  <div id="toast"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
