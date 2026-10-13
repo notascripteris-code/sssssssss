@@ -31,6 +31,7 @@ async function loadVideos(){
   }
 }
 async function loadFriends(){
+  if (S.me.guest) return;
   const id = S.me.id, f = {acc:new Set(), inc:[], out:new Set()};
   const {data} = await sb.from('friendships').select('*').or(`requester.eq.${id},addressee.eq.${id}`);
   (data||[]).forEach(r => {
@@ -83,6 +84,15 @@ async function boot(u){
 }
 $('#auth').hidden = false;
 sb.auth.getSession().then(({data:{session}}) => session ? boot(session.user) : null);
+
+/* ---------- guest ---------- */
+function needAcct(){ toast('Na tohle si vytvoř účet nebo se přihlas'); $('#auth').hidden = false; }
+async function bootGuest(){
+  S.me = {id:'g_' + Math.random().toString(36).slice(2, 9), username:'host' + Math.floor(100 + Math.random() * 900), emoji:'👤', bio:'', guest:true};
+  $('#auth').hidden = true; $('#navMe').textContent = '👤';
+  await loadVideos(); go('home');
+}
+$('#aGuest').addEventListener('click', bootGuest);
 
 /* ---------- pages ---------- */
 function page(title, html, onClose){ const p = $('#page'); p.hidden = false; p._close = onClose; $('#pageTitle').textContent = title; $('#pageBody').innerHTML = html; return $('#pageBody'); }
@@ -147,6 +157,7 @@ $('#view-shorts').addEventListener('click', e => {
 
 /* ---------- likes, comments ---------- */
 async function toggleLike(id){
+  if (S.me.guest) return needAcct();
   const on = S.mine.has(id);
   if (on){ S.mine.delete(id); S.lc[id] = Math.max(0, (S.lc[id]||1) - 1); await sb.from('likes').delete().match({video_id:id, user_id:S.me.id}); }
   else { S.mine.add(id); S.lc[id] = (S.lc[id]||0) + 1; await sb.from('likes').insert({video_id:id, user_id:S.me.id}); }
@@ -162,6 +173,7 @@ async function openSheet(id){
   $('#comments').scrollTop = 1e6;
 }
 async function sendComment(){
+  if (S.me.guest) return needAcct();
   const i = $('#cInput'), body = i.value.trim(); if (!body || !sheetId) return;
   i.value = ''; const {error} = await sb.from('comments').insert({video_id:sheetId, user_id:S.me.id, body});
   if (error) toast('Komentář se nepodařilo odeslat'); else openSheet(sheetId);
@@ -257,6 +269,7 @@ async function renderLive(){
     <input id="lTitle" class="field" maxlength="60" placeholder="Název live (nepovinné)" style="margin-top:14px"><button class="btn" id="goLive">🔴 Spustit live</button>
     <div style="display:flex;gap:8px;margin-top:14px"><input id="lCode" class="field" maxlength="6" placeholder="Kód místnosti" autocapitalize="characters"><button class="btn small ghost" id="joinCode" style="flex:none">Připojit</button></div></div>
     <h3 class="sec">Právě živě u tebe a přátel</h3><div id="rooms"><p class="muted" style="padding:0 16px">Načítám…</p></div>`;
+  if (S.me.guest){ $('#rooms').innerHTML = '<p class="muted" style="padding:0 16px">Jako host se připojíš kódem od kamaráda, nebo spustíš vlastní live a pošleš kód.</p>'; S.rooms = {}; return; }
   const {data} = await sb.from('live_rooms').select('*, profiles(username,emoji)').eq('is_live', true).gt('created_at', new Date(Date.now() - 864e5).toISOString()).order('created_at', {ascending:false});
   const l = (data||[]).filter(r => r.host === S.me.id || S.fr.acc.has(r.host));
   $('#rooms').innerHTML = l.map(r => `<div class="live-card" data-room='${esc(JSON.stringify(r.id))}'><span class="avatar">${r.profiles?.emoji||'🙂'}</span><div style="flex:1"><b>${esc(r.title||'Live')}</b><div class="muted">@${esc(r.profiles?.username)}</div></div><span class="tag">LIVE</span></div>`).join('') || '<p class="muted" style="padding:0 16px">Nikdo teď nevysílá.</p>';
@@ -265,6 +278,7 @@ async function renderLive(){
 async function startLive(){
   const title = ($('#lTitle').value.trim()) || ('Live od ' + S.me.username);
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+  if (S.me.guest) return joinRoom({id:code, code, title, host:S.me.id});
   const {data, error} = await sb.from('live_rooms').insert({host:S.me.id, title, code}).select().single();
   if (error) return toast('Live se nepodařilo spustit');
   joinRoom(data);
@@ -272,19 +286,19 @@ async function startLive(){
 async function joinCode(){
   const code = $('#lCode').value.trim().toUpperCase(); if (!code) return;
   const {data} = await sb.from('live_rooms').select('*').eq('code', code).eq('is_live', true).maybeSingle();
-  if (!data) return toast('Místnost s tímto kódem neexistuje'); joinRoom(data);
+  joinRoom(data || {id:code, code, title:'Live ' + code, host:null});
 }
 async function joinRoom(room){
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:true}); }
   catch { try { stream = await navigator.mediaDevices.getUserMedia({audio:true}); toast('Kamera není dostupná, jen zvuk'); }
-    catch { toast('Povol v telefonu kameru a mikrofon'); if (room.host === S.me.id) sb.from('live_rooms').update({is_live:false}).eq('id', room.id); return; } }
+    catch { toast('Povol v telefonu kameru a mikrofon'); if (room.host === S.me.id && !S.me.guest) sb.from('live_rooms').update({is_live:false}).eq('id', room.id); return; } }
   const me = S.me, peers = {}, streams = {}, tiles = {}; let state = {};
   const mine = {name:me.username, emoji:me.emoji, cam:stream.getVideoTracks().length > 0, mic:true};
-  const ch = sb.channel('live:' + room.id, {config:{presence:{key:me.id}}});
+  const ch = sb.channel('live:' + room.code, {config:{presence:{key:me.id}}});
   const body = page(room.title || 'Live', `<div id="tiles"></div><div class="livebar"><button id="bMic">🎤</button><button id="bCam">📷</button><button id="bInv">➕</button><button class="leave" id="bLeave">✕</button></div>`, () => {
     stream.getTracks().forEach(t => t.stop()); Object.values(peers).forEach(p => { try { p.close(); } catch {} });
-    sb.removeChannel(ch); if (room.host === me.id) sb.from('live_rooms').update({is_live:false}).eq('id', room.id);
+    sb.removeChannel(ch); if (room.host === me.id && !me.guest) sb.from('live_rooms').update({is_live:false}).eq('id', room.id);
   });
   const draw = () => {
     const g = $('#tiles', body); if (!g) return;
@@ -345,6 +359,7 @@ async function joinRoom(room){
 /* ---------- navigation & events ---------- */
 async function go(t){
   if (!S.me) return;
+  if (S.me.guest && t === 'upload') return needAcct();
   if (Date.now() - S.t > 20000 && (t === 'home' || t === 'shorts')) await loadVideos();
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t));
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
@@ -354,7 +369,10 @@ async function go(t){
   if (t === 'home') renderHome();
   if (t === 'shorts'){ renderShorts(); updSnd(); }
   if (t === 'live') renderLive();
-  if (t === 'profile') renderProfile($('#view-profile'), S.me.id);
+  if (t === 'profile'){
+    if (S.me.guest) $('#view-profile').innerHTML = `<div class="panel"><span class="big">👤</span><h2>Jsi host</h2><p class="muted">Jako host můžeš jen prohlížet. Pro nahrávání, lajky, komentáře, přátele a live si vytvoř účet.</p><button class="btn" id="toAuth">Přihlásit se / Registrace</button></div>`;
+    else renderProfile($('#view-profile'), S.me.id);
+  }
 }
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b){ if (!$('#page').hidden) closePage(); go(b.dataset.tab); } });
 $('#logo').addEventListener('click', () => go('home'));
@@ -366,11 +384,13 @@ document.addEventListener('click', async e => {
   if ((el = g('[data-like]'))) return toggleLike(el.dataset.like);
   if ((el = g('[data-comment]'))) return openSheet(el.dataset.comment);
   if ((el = g('[data-share]'))){ const v = vid(el.dataset.share); if (navigator.share) navigator.share({title:'Kaboom', text:v.title + ' (od @' + v.profiles?.username + ')'}).catch(() => {}); else toast('Sdílení tu není k dispozici'); return; }
+  if (g('[data-add],[data-acc],[data-unf]') && S.me.guest) return needAcct();
   if ((el = g('[data-add]'))){ const {error} = await sb.from('friendships').insert({requester:S.me.id, addressee:el.dataset.add}); toast(error ? 'Nepodařilo se odeslat' : 'Žádost odeslána'); await loadFriends(); return rerender(el.dataset.add); }
   if ((el = g('[data-acc]'))){ await sb.from('friendships').update({status:'accepted'}).eq('id', el.dataset.acc); toast('Jste přátelé 🎉'); await loadFriends(); return rerender(); }
   if ((el = g('[data-unf]'))){ if (!confirm('Opravdu zrušit přátelství?')) return; const id = S.me.id, o = el.dataset.unf; await sb.from('friendships').delete().or(`and(requester.eq.${id},addressee.eq.${o}),and(requester.eq.${o},addressee.eq.${id})`); await loadFriends(); return rerender(o); }
   if ((el = g('.card,.mini'))){ if (el.dataset.v) return player(el.dataset.v); }
   if ((el = g('[data-room]'))){ const r = S.rooms[JSON.parse(el.dataset.room)]; if (r) return joinRoom(r); }
+  if (t.id === 'toAuth') return needAcct();
   if (t.id === 'goLive') return startLive();
   if (t.id === 'joinCode') return joinCode();
   if (t.id === 'logout'){ await sb.auth.signOut(); location.reload(); return; }
