@@ -14,7 +14,8 @@ if (!C.url || /VLOZ/.test(C.url) || !window.supabase){
   $('#auth .panel').innerHTML = '<h2>Chybí nastavení</h2><p class="muted">Otevři soubor www/config.js a vlož adresu a klíč ze Supabase. Postup je v NAVOD.md. (Kdyby to bylo už hotové, zkontroluj připojení k internetu.)</p>';
   return;
 }
-const sb = supabase.createClient(C.url, C.key);
+const clean = s => String(s).replace(/[^\x21-\x7E]/g, '');
+const sb = supabase.createClient(new URL(clean(C.url)).origin, clean(C.key));
 const S = {me:null, scope:'all', sound:true, videos:[], lc:{}, mine:new Set(), fr:{acc:new Set(), inc:[], out:new Set()}, t:0};
 const vid = id => S.videos.find(v => v.id === id);
 const lk = v => S.lc[v.id] || 0;
